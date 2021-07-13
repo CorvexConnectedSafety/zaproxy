@@ -1,6 +1,15 @@
 # Changelog
 All notable changes to the docker containers will be documented in this file.
 
+### 2021-07-08
+ - Changed to use user's home directory for the Automation Framework files so it will work for any user
+
+### 2021-07-05
+ - Updated the baseline to use the Automation Framework by default for common options
+
+### 2021-06-11
+ - Updated the baseline to optionally use the Automation Framework for common options
+
 ### 2021-05-05
  - Updated to use Webswing 21.1
 
