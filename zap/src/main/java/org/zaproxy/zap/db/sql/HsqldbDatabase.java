@@ -27,13 +27,10 @@ public class HsqldbDatabase extends SqlDatabase {
         super();
     }
 
-    /* (non-Javadoc)
-     * @see org.parosproxy.paros.db.DatabaseIF#deleteSession(java.lang.String)
-     */
     @Override
     public void deleteSession(String sessionName) {
         super.deleteSession(sessionName);
-        getLogger().debug("deleteSession " + sessionName);
+        getLogger().debug("deleteSession {}", sessionName);
 
         deleteDbFile(new File(sessionName));
         deleteDbFile(new File(sessionName + ".data"));
@@ -44,10 +41,10 @@ public class HsqldbDatabase extends SqlDatabase {
     }
 
     private void deleteDbFile(File file) {
-        getLogger().debug("Deleting " + file.getAbsolutePath());
+        getLogger().debug("Deleting {}", file.getAbsolutePath());
         if (file.exists()) {
             if (!file.delete()) {
-                getLogger().error("Failed to delete " + file.getAbsolutePath());
+                getLogger().error("Failed to delete {}", file.getAbsolutePath());
             }
         }
     }
@@ -57,9 +54,6 @@ public class HsqldbDatabase extends SqlDatabase {
         return new HsqldbDatabaseServer(path);
     }
 
-    /* (non-Javadoc)
-     * @see org.parosproxy.paros.db.DatabaseIF#close(boolean, boolean)
-     */
     @Override
     public void close(boolean compact, boolean cleanup) {
         getLogger().debug("close");

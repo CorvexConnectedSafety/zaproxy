@@ -28,7 +28,6 @@ import java.util.Map.Entry;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JList;
-import javax.swing.JOptionPane;
 import javax.swing.plaf.basic.BasicComboBoxRenderer;
 import net.sf.json.JSONObject;
 import org.apache.commons.codec.binary.Base64;
@@ -58,12 +57,14 @@ import org.zaproxy.zap.session.SessionManagementMethod;
 import org.zaproxy.zap.session.WebSession;
 import org.zaproxy.zap.users.User;
 import org.zaproxy.zap.utils.ApiUtils;
+import org.zaproxy.zap.utils.ZapHtmlLabel;
 import org.zaproxy.zap.view.LayoutHelper;
 
 /**
  * The implementation for an {@link AuthenticationMethodType} where the user manually authenticates
  * and then just selects an already authenticated {@link WebSession}.
  */
+@SuppressWarnings("serial")
 public class ManualAuthenticationMethodType extends AuthenticationMethodType {
 
     private static final int METHOD_IDENTIFIER = 0;
@@ -217,7 +218,6 @@ public class ManualAuthenticationMethodType extends AuthenticationMethodType {
         public void decode(String encodedCredentials) {
             // TODO: Currently, cannot be decoded as HttpSessions are not
             // persisted.
-            throw new IllegalStateException("Manual Authentication Credentials cannot be decoded.");
         }
 
         @Override
@@ -236,7 +236,7 @@ public class ManualAuthenticationMethodType extends AuthenticationMethodType {
         /** The Constant serialVersionUID. */
         private static final long serialVersionUID = -8081914793980311435L;
 
-        private static final Logger log =
+        private static final Logger LOGGER =
                 LogManager.getLogger(ManualAuthenticationCredentialsOptionsPanel.class);
         private JComboBox<HttpSession> sessionsComboBox;
         private Context uiSharedContext;
@@ -263,7 +263,7 @@ public class ManualAuthenticationMethodType extends AuthenticationMethodType {
             this.getSessionsComboBox().setRenderer(new HttpSessionRenderer());
 
             this.add(
-                    new JLabel(
+                    new ZapHtmlLabel(
                             Constant.messages.getString(
                                     "authentication.method.manual.field.description")),
                     LayoutHelper.getGBC(0, 1, 2, 0.0d, 0.0d));
@@ -294,8 +294,7 @@ public class ManualAuthenticationMethodType extends AuthenticationMethodType {
                                 .getExtension(ExtensionHttpSessions.class);
                 List<HttpSession> sessions =
                         extensionHttpSessions.getHttpSessionsForContext(uiSharedContext);
-                if (log.isDebugEnabled())
-                    log.debug("Found sessions for Manual Authentication Config: " + sessions);
+                LOGGER.debug("Found sessions for Manual Authentication Config: {}", sessions);
                 sessionsComboBox =
                         new JComboBox<>(sessions.toArray(new HttpSession[sessions.size()]));
                 sessionsComboBox.setSelectedItem(this.getCredentials().getSelectedSession());
@@ -305,25 +304,15 @@ public class ManualAuthenticationMethodType extends AuthenticationMethodType {
 
         @Override
         public boolean validateFields() {
-            if (sessionsComboBox.getSelectedIndex() < 0) {
-                JOptionPane.showMessageDialog(
-                        this,
-                        Constant.messages.getString(
-                                "authentication.method.manual.dialog.error.nosession.text"),
-                        Constant.messages.getString(
-                                "authentication.method.manual.dialog.error.title"),
-                        JOptionPane.WARNING_MESSAGE);
-                sessionsComboBox.requestFocusInWindow();
-                return false;
-            }
+            // No validation needed
             return true;
         }
 
         @Override
         public void saveCredentials() {
-            log.info(
-                    "Saving Manual Authentication Method: "
-                            + getSessionsComboBox().getSelectedItem());
+            LOGGER.info(
+                    "Saving Manual Authentication Method: {}",
+                    getSessionsComboBox().getSelectedItem());
             getCredentials()
                     .setSelectedSession((HttpSession) getSessionsComboBox().getSelectedItem());
         }

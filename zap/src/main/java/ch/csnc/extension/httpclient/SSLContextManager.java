@@ -66,6 +66,8 @@ import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+/** @deprecated (2.12.0) No longer in use. */
+@Deprecated
 public class SSLContextManager {
 
     /** The canonical class name of Sun PKCS#11 Provider. */
@@ -266,7 +268,7 @@ public class SSLContextManager {
             return null;
         }
 
-        StringBuffer buff = new StringBuffer();
+        StringBuilder buff = new StringBuilder();
         X509Certificate x509 = (X509Certificate) cert;
 
         try {

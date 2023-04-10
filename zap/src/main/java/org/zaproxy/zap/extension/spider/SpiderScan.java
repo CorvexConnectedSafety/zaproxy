@@ -41,16 +41,19 @@ import org.zaproxy.zap.model.ScanEventPublisher;
 import org.zaproxy.zap.model.ScanListenner;
 import org.zaproxy.zap.model.ScanListenner2;
 import org.zaproxy.zap.model.Target;
-import org.zaproxy.zap.spider.SpiderListener;
-import org.zaproxy.zap.spider.SpiderParam;
-import org.zaproxy.zap.spider.SpiderTaskResult;
-import org.zaproxy.zap.spider.filters.FetchFilter;
-import org.zaproxy.zap.spider.filters.FetchFilter.FetchStatus;
-import org.zaproxy.zap.spider.filters.ParseFilter;
-import org.zaproxy.zap.spider.parser.SpiderParser;
 import org.zaproxy.zap.users.User;
+import org.zaproxy.zap.utils.Stats;
 
-public class SpiderScan implements ScanListenner, SpiderListener, GenericScanner2 {
+/** @deprecated (2.12.0) See the spider add-on in zap-extensions instead. */
+@Deprecated
+public class SpiderScan
+        implements ScanListenner, org.zaproxy.zap.spider.SpiderListener, GenericScanner2 {
+
+    public static final String SPIDER_SCAN_STARTED_STATS = "stats.spider.started";
+    public static final String SPIDER_SCAN_STOPPED_STATS = "stats.spider.stopped";
+    public static final String SPIDER_SCAN_TIME_STATS = "stats.spider.time";
+    public static final String SPIDER_URL_FOUND_STATS = "stats.spider.url.found";
+    public static final String SPIDER_URL_ERROR_STATS = "stats.spider.url.error";
 
     private static enum State {
         NOT_STARTED,
@@ -59,12 +62,18 @@ public class SpiderScan implements ScanListenner, SpiderListener, GenericScanner
         FINISHED
     }
 
-    private static final EnumSet<FetchStatus> FETCH_STATUS_IN_SCOPE =
-            EnumSet.of(FetchStatus.VALID, FetchStatus.SEED);
+    private static final EnumSet<org.zaproxy.zap.spider.filters.FetchFilter.FetchStatus>
+            FETCH_STATUS_IN_SCOPE =
+                    EnumSet.of(
+                            org.zaproxy.zap.spider.filters.FetchFilter.FetchStatus.VALID,
+                            org.zaproxy.zap.spider.filters.FetchFilter.FetchStatus.SEED);
 
-    private static final EnumSet<FetchStatus> FETCH_STATUS_OUT_OF_SCOPE =
-            EnumSet.of(
-                    FetchStatus.OUT_OF_SCOPE, FetchStatus.OUT_OF_CONTEXT, FetchStatus.USER_RULES);
+    private static final EnumSet<org.zaproxy.zap.spider.filters.FetchFilter.FetchStatus>
+            FETCH_STATUS_OUT_OF_SCOPE =
+                    EnumSet.of(
+                            org.zaproxy.zap.spider.filters.FetchFilter.FetchStatus.OUT_OF_SCOPE,
+                            org.zaproxy.zap.spider.filters.FetchFilter.FetchStatus.OUT_OF_CONTEXT,
+                            org.zaproxy.zap.spider.filters.FetchFilter.FetchStatus.USER_RULES);
 
     private final Lock lock;
 
@@ -121,35 +130,12 @@ public class SpiderScan implements ScanListenner, SpiderListener, GenericScanner
      * @param spiderURI the starting URI, may be {@code null}.
      * @param scanUser the user to be used in the scan, may be {@code null}.
      * @param scanId the ID of the scan
-     * @deprecated (2.6.0) Use {@link #SpiderScan(ExtensionSpider, SpiderParam, Target, URI, User,
-     *     int, String)} instead.
-     */
-    @Deprecated
-    public SpiderScan(
-            ExtensionSpider extension,
-            SpiderParam spiderParams,
-            Target target,
-            URI spiderURI,
-            User scanUser,
-            int scanId) {
-        this(extension, spiderParams, target, spiderURI, scanUser, scanId, "SpiderScan" + scanId);
-    }
-
-    /**
-     * Constructs a {@code SpiderScan} with the given data.
-     *
-     * @param extension the extension to obtain configurations and notify the view
-     * @param spiderParams the spider options
-     * @param target the spider target
-     * @param spiderURI the starting URI, may be {@code null}.
-     * @param scanUser the user to be used in the scan, may be {@code null}.
-     * @param scanId the ID of the scan
      * @param name the name that identifies the target
      * @since 2.6.0
      */
     public SpiderScan(
             ExtensionSpider extension,
-            SpiderParam spiderParams,
+            org.zaproxy.zap.spider.SpiderParam spiderParams,
             Target target,
             URI spiderURI,
             User scanUser,
@@ -229,6 +215,7 @@ public class SpiderScan implements ScanListenner, SpiderListener, GenericScanner
                 state = State.RUNNING;
                 SpiderEventPublisher.publishScanEvent(
                         ScanEventPublisher.SCAN_STARTED_EVENT, this.scanId, this.target, user);
+                Stats.incCounter(SPIDER_SCAN_STARTED_STATS);
             }
         } finally {
             lock.unlock();
@@ -290,6 +277,7 @@ public class SpiderScan implements ScanListenner, SpiderListener, GenericScanner
                 state = State.FINISHED;
                 SpiderEventPublisher.publishScanEvent(
                         ScanEventPublisher.SCAN_STOPPED_EVENT, this.scanId);
+                Stats.incCounter(SPIDER_SCAN_STOPPED_STATS);
             }
         } finally {
             lock.unlock();
@@ -350,7 +338,7 @@ public class SpiderScan implements ScanListenner, SpiderListener, GenericScanner
     }
 
     @Override
-    public void notifySpiderTaskResult(SpiderTaskResult spiderTaskResult) {
+    public void notifySpiderTaskResult(org.zaproxy.zap.spider.SpiderTaskResult spiderTaskResult) {
         HttpMessage msg = spiderTaskResult.getHttpMessage();
         HttpRequestHeader requestHeader = msg.getRequestHeader();
         HttpResponseHeader responseHeader = msg.getResponseHeader();
@@ -366,8 +354,10 @@ public class SpiderScan implements ScanListenner, SpiderListener, GenericScanner
 
         if (msg.isResponseFromTargetHost()) {
             resourcesFound.add(resource);
+            Stats.incCounter(SPIDER_URL_FOUND_STATS);
         } else {
             resourcesIoErrors.add(resource);
+            Stats.incCounter(SPIDER_URL_ERROR_STATS);
         }
 
         if (View.isInitialised()) {
@@ -375,7 +365,8 @@ public class SpiderScan implements ScanListenner, SpiderListener, GenericScanner
         }
     }
 
-    private void addMessageToMessagesTableModel(final SpiderTaskResult spiderTaskResult) {
+    private void addMessageToMessagesTableModel(
+            final org.zaproxy.zap.spider.SpiderTaskResult spiderTaskResult) {
         if (spiderTaskResult.getHttpMessage().getHistoryRef() == null) {
             return;
         }
@@ -433,7 +424,10 @@ public class SpiderScan implements ScanListenner, SpiderListener, GenericScanner
     }
 
     @Override
-    public void foundURI(String uri, String method, FetchStatus status) {
+    public void foundURI(
+            String uri,
+            String method,
+            org.zaproxy.zap.spider.filters.FetchFilter.FetchStatus status) {
         numberOfURIsFound.incrementAndGet();
         if (FETCH_STATUS_IN_SCOPE.contains(status)) {
             foundURIs.add(uri);
@@ -444,7 +438,7 @@ public class SpiderScan implements ScanListenner, SpiderListener, GenericScanner
 
     @Override
     public void run() {
-        // TODO Auto-generated method stub
+        // Nothing to do.
     }
 
     @Override
@@ -499,6 +493,7 @@ public class SpiderScan implements ScanListenner, SpiderListener, GenericScanner
     @Override
     public void scanFinshed(String host) {
         this.spiderComplete(true);
+        Stats.incCounter(SPIDER_SCAN_TIME_STATS, this.spiderThread.getTimeTakenInMs());
     }
 
     @Override
@@ -529,15 +524,18 @@ public class SpiderScan implements ScanListenner, SpiderListener, GenericScanner
         this.listener = listener;
     }
 
-    public void setCustomSpiderParsers(List<SpiderParser> customSpiderParsers) {
+    public void setCustomSpiderParsers(
+            List<org.zaproxy.zap.spider.parser.SpiderParser> customSpiderParsers) {
         spiderThread.setCustomSpiderParsers(customSpiderParsers);
     }
 
-    public void setCustomFetchFilters(List<FetchFilter> customFetchFilters) {
+    public void setCustomFetchFilters(
+            List<org.zaproxy.zap.spider.filters.FetchFilter> customFetchFilters) {
         spiderThread.setCustomFetchFilters(customFetchFilters);
     }
 
-    public void setCustomParseFilters(List<ParseFilter> customParseFilters) {
+    public void setCustomParseFilters(
+            List<org.zaproxy.zap.spider.filters.ParseFilter> customParseFilters) {
         spiderThread.setCustomParseFilters(customParseFilters);
     }
 

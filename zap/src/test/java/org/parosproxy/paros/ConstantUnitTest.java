@@ -20,9 +20,9 @@
 package org.parosproxy.paros;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.emptyString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.isEmptyString;
 import static org.hamcrest.Matchers.not;
 
 import java.io.ByteArrayOutputStream;
@@ -98,7 +98,7 @@ class ConstantUnitTest {
         // Then
         assertHomeFile("config.xml", defaultConfigContents());
         assertHomeFile("log4j2.properties", defaultContents("log4j2-home.properties"));
-        assertHomeFile("zap.log", not(isEmptyString()));
+        assertHomeFile("zap.log", is(not(emptyString())));
         assertHomeDirs();
         assertThat(Files.walk(zapHomeDir).count(), is(equalTo(8L)));
     }
@@ -260,5 +260,35 @@ class ConstantUnitTest {
                     is(equalTo("true")));
         }
         assertThat(configuration.getProperty(unrelatedKey), is(equalTo("abc")));
+    }
+
+    @Test
+    void shouldUpgradeDefaultThreadsFrom2_12_0() {
+        // Given
+        ZapXmlConfiguration configuration = new ZapXmlConfiguration();
+        configuration.setProperty("scanner.threadPerHost", 2);
+        configuration.setProperty("pscans.threads", 4);
+        // When
+        Constant.upgradeFrom2_12(configuration);
+        // Then
+        assertThat(
+                configuration.getProperty("scanner.threadPerHost"),
+                is(equalTo(Constant.getDefaultThreadCount())));
+        assertThat(
+                configuration.getProperty("pscans.threads"),
+                is(equalTo(Constant.getDefaultThreadCount() / 2)));
+    }
+
+    @Test
+    void shouldNotChangeNonDefaultThreadsFrom2_12_0() {
+        // Given
+        ZapXmlConfiguration configuration = new ZapXmlConfiguration();
+        configuration.setProperty("scanner.threadPerHost", 3);
+        configuration.setProperty("pscans.threads", 5);
+        // When
+        Constant.upgradeFrom2_12(configuration);
+        // Then
+        assertThat(configuration.getProperty("scanner.threadPerHost"), is(equalTo(3)));
+        assertThat(configuration.getProperty("pscans.threads"), is(equalTo(5)));
     }
 }

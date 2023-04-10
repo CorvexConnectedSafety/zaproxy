@@ -69,6 +69,13 @@
 // ZAP: 2020/09/23 Add functionality for custom error pages handling (Issue 9).
 // ZAP: 2020/11/17 Use new TechSet#getAllTech().
 // ZAP: 2020/11/26 Use Log4j2 getLogger() and deprecate Log4j1.x.
+// ZAP: 2021/07/20 Correct message updated with the scan rule ID header (Issue 6689).
+// ZAP: 2022/06/11 Add functionality for custom pages AUTHN/AUTHZ handling.
+// ZAP: 2022/06/05 Remove usage of HttpException.
+// ZAP: 2022/08/03 Keep enabled state when setting default alert threshold (Issue 7400).
+// ZAP: 2022/09/08 Use format specifiers instead of concatenation when logging.
+// ZAP: 2022/09/28 Do not set the Content-Length header when the method does not require one.
+// ZAP: 2023/01/10 Tidy up logger.
 package org.parosproxy.paros.core.scanner;
 
 import java.io.IOException;
@@ -77,11 +84,12 @@ import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.security.InvalidParameterException;
 import java.util.Date;
+import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.commons.configuration.Configuration;
-import org.apache.commons.httpclient.HttpException;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.parosproxy.paros.control.Control;
@@ -89,6 +97,7 @@ import org.parosproxy.paros.core.scanner.Alert.Source;
 import org.parosproxy.paros.model.HistoryReference;
 import org.parosproxy.paros.network.HttpHeader;
 import org.parosproxy.paros.network.HttpMessage;
+import org.parosproxy.paros.network.HttpRequestHeader;
 import org.parosproxy.paros.network.HttpStatusCode;
 import org.zaproxy.zap.control.AddOn;
 import org.zaproxy.zap.extension.anticsrf.ExtensionAntiCSRF;
@@ -108,7 +117,7 @@ public abstract class AbstractPlugin implements Plugin, Comparable<Object> {
     private HostProcess parent = null;
     private HttpMessage msg = null;
     private boolean enabled = true;
-    private Logger logger = LogManager.getLogger(this.getClass());
+    private final Logger logger = LogManager.getLogger(getClass());
     private Configuration config = null;
     // ZAP Added delayInMs
     private int delayInMs;
@@ -207,7 +216,6 @@ public abstract class AbstractPlugin implements Plugin, Comparable<Object> {
      * </ul>
      *
      * @param message the message to be sent and received
-     * @throws HttpException if a HTTP error occurred
      * @throws IOException if an I/O error occurred (for example, read time out)
      * @see #sendAndReceive(HttpMessage, boolean)
      * @see #sendAndReceive(HttpMessage, boolean, boolean)
@@ -234,7 +242,6 @@ public abstract class AbstractPlugin implements Plugin, Comparable<Object> {
      * @param message the message to be sent and received
      * @param isFollowRedirect {@code true} if redirections should be followed, {@code false}
      *     otherwise
-     * @throws HttpException if a HTTP error occurred
      * @throws IOException if an I/O error occurred (for example, read time out)
      * @see #sendAndReceive(HttpMessage)
      * @see #sendAndReceive(HttpMessage, boolean, boolean)
@@ -264,7 +271,6 @@ public abstract class AbstractPlugin implements Plugin, Comparable<Object> {
      *     otherwise
      * @param handleAntiCSRF {@code true} if the anti-CSRF token present in the request should be
      *     handled/regenerated, {@code false} otherwise
-     * @throws HttpException if a HTTP error occurred
      * @throws IOException if an I/O error occurred (for example, read time out)
      * @see #sendAndReceive(HttpMessage)
      * @see #sendAndReceive(HttpMessage, boolean)
@@ -287,15 +293,15 @@ public abstract class AbstractPlugin implements Plugin, Comparable<Object> {
         }
 
         if (this.parent.getScannerParam().isInjectPluginIdInHeader()) {
-            this.msg
-                    .getRequestHeader()
+            message.getRequestHeader()
                     .setHeader(HttpHeader.X_ZAP_SCAN_ID, Integer.toString(getId()));
         }
 
         // always get the fresh copy
         message.getRequestHeader().setHeader(HttpHeader.IF_MODIFIED_SINCE, null);
         message.getRequestHeader().setHeader(HttpHeader.IF_NONE_MATCH, null);
-        message.getRequestHeader().setContentLength(message.getRequestBody().length());
+
+        updateRequestContentLength(message);
 
         if (this.getDelayInMs() > 0) {
             try {
@@ -319,6 +325,30 @@ public abstract class AbstractPlugin implements Plugin, Comparable<Object> {
 
         // ZAP: Set the history reference back and run the "afterScan" methods of any ScannerHooks
         parent.performScannerHookAfterScan(message, this);
+    }
+
+    /**
+     * Updates the Content-Length header of the request.
+     *
+     * <p>For methods with absent or unanticipated enclosed content, the header is removed otherwise
+     * in all other cases the header is updated to match the length of the content.
+     *
+     * @param message the message to update.
+     * @since 2.12.0
+     */
+    protected void updateRequestContentLength(HttpMessage message) {
+        int bodyLength = message.getRequestBody().length();
+        String method = message.getRequestHeader().getMethod();
+        if (bodyLength == 0
+                && (HttpRequestHeader.GET.equalsIgnoreCase(method)
+                        || HttpRequestHeader.CONNECT.equalsIgnoreCase(method)
+                        || HttpRequestHeader.DELETE.equalsIgnoreCase(method)
+                        || HttpRequestHeader.HEAD.equalsIgnoreCase(method)
+                        || HttpRequestHeader.TRACE.equalsIgnoreCase(method))) {
+            message.getRequestHeader().setHeader(HttpHeader.CONTENT_LENGTH, null);
+            return;
+        }
+        message.getRequestHeader().setContentLength(bodyLength);
     }
 
     @Override
@@ -681,6 +711,22 @@ public abstract class AbstractPlugin implements Plugin, Comparable<Object> {
     }
 
     /**
+     * Tells whether or not the message matches {@code CustomPage.Type.AUTH_4XX} definitions. Checks
+     * if the message matches {@code CustomPage.Type.OK_200} first, in case the user is trying to
+     * override something.
+     *
+     * @param msg the message that will be checked
+     * @return {@code true} if the message matches, {@code false} otherwise
+     * @since 2.12.0
+     */
+    protected boolean isPageAuthIssue(HttpMessage msg) {
+        if (isCustomPage(msg, CustomPage.Type.OK_200)) {
+            return false;
+        }
+        return isCustomPage(msg, CustomPage.Type.AUTH_4XX);
+    }
+
+    /**
      * Tells whether or not the response has a status code between 200 and 299 (inclusive), or
      * {@code CustomPage.Type.OK_200} and {@code Analyser#isFileExist(HttpMessage)}. Checks if the
      * message matches {@code CustomPage.Type.NOTFOUND_404} or {@code CustomPage.Type.ERROR_500}
@@ -689,7 +735,7 @@ public abstract class AbstractPlugin implements Plugin, Comparable<Object> {
      * @param msg the message that will be checked
      * @return {@code true} if the message matches, {@code false} otherwise
      * @since 2.10.0
-     * @see {@code Analyser#isFileExist(HttpMessage)}
+     * @see Analyser#isFileExist(HttpMessage)
      */
     public boolean isSuccess(HttpMessage msg) {
         if (isCustomPage(msg, CustomPage.Type.NOTFOUND_404)
@@ -711,7 +757,7 @@ public abstract class AbstractPlugin implements Plugin, Comparable<Object> {
      * @param msg the message that will be checked
      * @return {@code true} if the message matches, {@code false} otherwise
      * @since 2.10.0
-     * @see {@code Analyser#isFileExist(HttpMessage)}
+     * @see Analyser#isFileExist(HttpMessage)
      */
     public boolean isClientError(HttpMessage msg) {
         if (isCustomPage(msg, CustomPage.Type.OK_200)
@@ -828,12 +874,26 @@ public abstract class AbstractPlugin implements Plugin, Comparable<Object> {
     @Override
     public void setAlertThreshold(AlertThreshold level) {
         setProperty("level", level.name());
-        setEnabled(level != AlertThreshold.OFF);
+        setEnabledFromLevel();
     }
 
     @Override
     public void setDefaultAlertThreshold(AlertThreshold level) {
+        AlertThreshold oldDefaultAlertThreshold = defaultAttackThreshold;
         this.defaultAttackThreshold = level;
+        if ((defaultAttackThreshold == AlertThreshold.OFF
+                        || oldDefaultAlertThreshold == AlertThreshold.OFF)
+                && getAlertThreshold(true) == AlertThreshold.DEFAULT) {
+            setEnabled(defaultAttackThreshold != AlertThreshold.OFF);
+        }
+    }
+
+    private void setEnabledFromLevel() {
+        AlertThreshold level = getAlertThreshold(true);
+        setEnabled(
+                level != AlertThreshold.OFF
+                        && !(level == AlertThreshold.DEFAULT
+                                && this.defaultAttackThreshold == AlertThreshold.OFF));
     }
 
     /** Override this if you plugin supports other levels. */
@@ -1265,6 +1325,18 @@ public abstract class AbstractPlugin implements Plugin, Comparable<Object> {
         return 0;
     }
 
+    /**
+     * Gets the tags attached to the alerts raised by this plugin. Can be overridden by scan rules
+     * to return the associated alert tags.
+     *
+     * @return the Alert Tags
+     * @since 2.11.0
+     */
+    @Override
+    public Map<String, String> getAlertTags() {
+        return null;
+    }
+
     @Override
     public AddOn.Status getStatus() {
         return status;
@@ -1272,6 +1344,19 @@ public abstract class AbstractPlugin implements Plugin, Comparable<Object> {
 
     public void setStatus(AddOn.Status status) {
         this.status = status;
+    }
+
+    /**
+     * Gets the name of the scan rule, falling back to the simple name of the class as last resort.
+     *
+     * @return a name representing the scan rule.
+     * @since 2.12.0
+     */
+    @Override
+    public final String getDisplayName() {
+        return StringUtils.isBlank(this.getName())
+                ? this.getClass().getSimpleName()
+                : this.getName();
     }
 
     /**
@@ -1289,6 +1374,7 @@ public abstract class AbstractPlugin implements Plugin, Comparable<Object> {
      *   <li>CWE ID - using {@link #getCweId()}
      *   <li>WASC ID - using {@link #getWascId()}
      *   <li>URI - from the alert message
+     *   <li>Alert Tags - using {@link #getAlertTags()}
      * </ul>
      *
      * @return the alert builder.
@@ -1319,6 +1405,7 @@ public abstract class AbstractPlugin implements Plugin, Comparable<Object> {
             setReference(plugin.getReference());
             setCweId(plugin.getCweId());
             setWascId(plugin.getWascId());
+            setTags(plugin.getAlertTags());
         }
 
         @Override
@@ -1400,6 +1487,12 @@ public abstract class AbstractPlugin implements Plugin, Comparable<Object> {
         }
 
         @Override
+        public AlertBuilder setInputVector(String inputVector) {
+            super.setInputVector(inputVector);
+            return this;
+        }
+
+        @Override
         public AlertBuilder setCweId(int cweId) {
             super.setCweId(cweId);
             return this;
@@ -1442,6 +1535,36 @@ public abstract class AbstractPlugin implements Plugin, Comparable<Object> {
             return this;
         }
 
+        @Override
+        public AlertBuilder setTags(Map<String, String> tags) {
+            super.setTags(tags);
+            return this;
+        }
+
+        @Override
+        public AlertBuilder addTag(String tag) {
+            super.addTag(tag);
+            return this;
+        }
+
+        @Override
+        public AlertBuilder addTag(String tag, String value) {
+            super.addTag(tag, value);
+            return this;
+        }
+
+        @Override
+        public AlertBuilder removeTag(String tag) {
+            super.removeTag(tag);
+            return this;
+        }
+
+        @Override
+        public AlertBuilder removeTag(String tag, String value) {
+            super.removeTag(tag, value);
+            return this;
+        }
+
         /**
          * Raises the alert with specified data.
          *
@@ -1454,15 +1577,11 @@ public abstract class AbstractPlugin implements Plugin, Comparable<Object> {
             }
 
             Alert alert = build();
-            if (plugin.logger.isDebugEnabled()) {
-                plugin.logger.debug(
-                        "New alert pluginid="
-                                + alert.getPluginId()
-                                + " "
-                                + alert.getName()
-                                + " uri="
-                                + alert.getUri());
-            }
+            plugin.logger.debug(
+                    "New alert pluginid={} {} uri={}",
+                    alert.getPluginId(),
+                    alert.getName(),
+                    alert.getUri());
             plugin.parent.alertFound(alert);
         }
     }

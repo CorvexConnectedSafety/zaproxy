@@ -44,7 +44,7 @@ import org.zaproxy.zap.extension.api.ApiView;
 
 public class AutoUpdateAPI extends ApiImplementor {
 
-    private static Logger log = LogManager.getLogger(AutoUpdateAPI.class);
+    private static final Logger LOGGER = LogManager.getLogger(AutoUpdateAPI.class);
 
     private static final String PREFIX = "autoupdate";
     private static final String ACTION_DOWNLOAD_LATEST_RELEASE = "downloadLatestRelease";
@@ -87,7 +87,7 @@ public class AutoUpdateAPI extends ApiImplementor {
 
     @Override
     public ApiResponse handleApiAction(String name, JSONObject params) throws ApiException {
-        log.debug("handleApiAction " + name + " " + params.toString());
+        LOGGER.debug("handleApiAction {} {}", name, params);
         if (ACTION_DOWNLOAD_LATEST_RELEASE.equals(name)) {
             if (this.downloadLatestRelease()) {
                 return ApiResponseElement.OK;
@@ -119,15 +119,19 @@ public class AutoUpdateAPI extends ApiImplementor {
             AddOn ao = extension.getLocalVersionInfo().getAddOn(id);
             if (ao == null) {
                 throw new ApiException(Type.DOES_NOT_EXIST);
+            }
+            if (ao.isMandatory()) {
+                throw new ApiException(
+                        Type.ILLEGAL_PARAMETER,
+                        "The add-on can't be uninstalled, it is mandatory.");
+            }
+            List<String> l = new ArrayList<>();
+            l.add(id);
+            String errorMessages = extension.uninstallAddOns(l);
+            if (errorMessages.length() == 0) {
+                return ApiResponseElement.OK;
             } else {
-                List<String> l = new ArrayList<>();
-                l.add(id);
-                String errorMessages = extension.uninstallAddOns(l);
-                if (errorMessages.length() == 0) {
-                    return ApiResponseElement.OK;
-                } else {
-                    throw new ApiException(ApiException.Type.INTERNAL_ERROR, errorMessages);
-                }
+                throw new ApiException(ApiException.Type.INTERNAL_ERROR, errorMessages);
             }
         } else {
             throw new ApiException(ApiException.Type.BAD_ACTION);
@@ -195,6 +199,7 @@ public class AutoUpdateAPI extends ApiImplementor {
         map.put("installationStatus", ObjectUtils.toString(ao.getInstallationStatus()));
         if (localAddOn) {
             map.put("file", ao.getFile().toString());
+            map.put("mandatory", String.valueOf(ao.isMandatory()));
         }
         return new ApiResponseSet<>("addon", map);
     }

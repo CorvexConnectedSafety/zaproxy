@@ -23,8 +23,10 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.emptyArray;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.sameInstance;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -32,18 +34,28 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.io.IOException;
 import java.security.InvalidParameterException;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Stream;
 import org.apache.commons.configuration.Configuration;
 import org.apache.commons.httpclient.URI;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.parosproxy.paros.Constant;
 import org.parosproxy.paros.core.scanner.Plugin.AlertThreshold;
+import org.parosproxy.paros.network.HttpHeader;
+import org.parosproxy.paros.network.HttpMalformedHeaderException;
 import org.parosproxy.paros.network.HttpMessage;
 import org.parosproxy.paros.network.HttpRequestHeader;
+import org.parosproxy.paros.network.HttpSender;
 import org.zaproxy.zap.control.AddOn;
 import org.zaproxy.zap.extension.custompages.CustomPage;
 import org.zaproxy.zap.model.TechSet;
@@ -53,6 +65,19 @@ import org.zaproxy.zap.utils.ZapXmlConfiguration;
 
 /** Unit test for {@link AbstractPlugin}. */
 class AbstractPluginUnitTest extends PluginTestUtils {
+
+    private static final List<String> METHODS_NO_ENCLOSED_CONTENT =
+            Arrays.asList(
+                    HttpRequestHeader.CONNECT,
+                    "connect",
+                    HttpRequestHeader.DELETE,
+                    "delete",
+                    HttpRequestHeader.GET,
+                    "get",
+                    HttpRequestHeader.HEAD,
+                    "head",
+                    HttpRequestHeader.TRACE,
+                    "trace");
 
     HostProcess parent;
     HttpMessage message;
@@ -185,6 +210,85 @@ class AbstractPluginUnitTest extends PluginTestUtils {
     void shouldBeEnabledByDefault() {
         // Given / When
         AbstractPlugin plugin = createAbstractPlugin();
+        // Then
+        assertThat(plugin.isEnabled(), is(equalTo(Boolean.TRUE)));
+    }
+
+    @Test
+    void shouldBeDisabledWhenOffThresholdSet() {
+        // Given
+        AbstractPlugin plugin = createAbstractPluginWithConfig();
+        // When
+        plugin.setAlertThreshold(AlertThreshold.OFF);
+        // Then
+        assertThat(plugin.isEnabled(), is(equalTo(Boolean.FALSE)));
+    }
+
+    @Test
+    void shouldBeDisabledWhenDefaultOffThresholdSet() {
+        // Given
+        AbstractPlugin plugin = createAbstractPluginWithConfig();
+        // When
+        plugin.setDefaultAlertThreshold(AlertThreshold.OFF);
+        // Then
+        assertThat(plugin.isEnabled(), is(equalTo(Boolean.FALSE)));
+    }
+
+    private static Stream<Arguments> alertThresholdsAndEnabledState() {
+        return Stream.of(AlertThreshold.values())
+                .flatMap(e -> Stream.of(arguments(e, true), arguments(e, false)));
+    }
+
+    @ParameterizedTest
+    @MethodSource("alertThresholdsAndEnabledState")
+    void shouldNotChangeEnabledStateIfNotUsingDefaultThresholdWhenDefaultSet(
+            AlertThreshold defaultThreshold, boolean enabled) {
+        // Given
+        AbstractPlugin plugin = createAbstractPluginWithConfig();
+        plugin.setAlertThreshold(AlertThreshold.MEDIUM);
+        plugin.setEnabled(enabled);
+        // When
+        plugin.setDefaultAlertThreshold(defaultThreshold);
+        // Then
+        assertThat(plugin.isEnabled(), is(equalTo(enabled)));
+    }
+
+    @Test
+    void shouldBeDisabledWhenOffAndDefaultOffThresholdSet() {
+        // Given
+        AbstractPlugin plugin = createAbstractPluginWithConfig();
+        // When
+        plugin.setAlertThreshold(AlertThreshold.OFF);
+        plugin.setDefaultAlertThreshold(AlertThreshold.OFF);
+        // Then
+        assertThat(plugin.isEnabled(), is(equalTo(Boolean.FALSE)));
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = AlertThreshold.class,
+            names = {"LOW", "MEDIUM", "HIGH"})
+    void shouldBeEnabledWhenThresholdSetButDefaultOff(AlertThreshold threshold) {
+        // Given
+        AbstractPlugin plugin = createAbstractPluginWithConfig();
+        // When
+        plugin.setDefaultAlertThreshold(AlertThreshold.OFF);
+        plugin.setAlertThreshold(threshold);
+        // Then
+        assertThat(plugin.isEnabled(), is(equalTo(Boolean.TRUE)));
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = AlertThreshold.class,
+            names = {"LOW", "MEDIUM", "HIGH"})
+    void shouldBeReEnabledWhenDefaultThresholdSetFromOff(AlertThreshold threshold) {
+        // Given
+        AbstractPlugin plugin = createAbstractPluginWithConfig();
+        plugin.setAlertThreshold(AlertThreshold.DEFAULT);
+        plugin.setDefaultAlertThreshold(AlertThreshold.OFF);
+        // When
+        plugin.setDefaultAlertThreshold(threshold);
         // Then
         assertThat(plugin.isEnabled(), is(equalTo(Boolean.TRUE)));
     }
@@ -402,7 +506,6 @@ class AbstractPluginUnitTest extends PluginTestUtils {
         pluginA.setDefaultAttackStrength(Plugin.AttackStrength.LOW);
         pluginA.setTechSet(TechSet.getAllTech());
         pluginA.setStatus(AddOn.Status.beta);
-        pluginA.setEnabled(false);
         AbstractPlugin pluginB = createAbstractPluginWithConfig();
         // When
         pluginA.cloneInto(pluginB);
@@ -1602,6 +1705,52 @@ class AbstractPluginUnitTest extends PluginTestUtils {
     }
 
     @Test
+    void shouldCheckAuthIssueWithParent() {
+        // Given
+        CustomPage.Type type = CustomPage.Type.AUTH_4XX;
+        given(parent.isCustomPage(message, type)).willReturn(true);
+        given(parent.getAnalyser()).willReturn(analyser);
+        plugin.init(message, parent);
+        // When
+        boolean result = plugin.isPageAuthIssue(message);
+        // Then
+        assertThat(result, is(equalTo(true)));
+        verify(parent).isCustomPage(message, type);
+        verifyNoInteractions(analyser);
+    }
+
+    @Test
+    void isPageAuthIssueShouldReturnTrueIfCustomPageMatches() {
+        // Given
+        CustomPage.Type type = CustomPage.Type.AUTH_4XX;
+        HttpMessage message = new HttpMessage();
+        given(parent.isCustomPage(message, type)).willReturn(true);
+        plugin.init(message, parent);
+        // When
+        boolean result = plugin.isPageAuthIssue(message);
+        // Then
+        assertThat(result, is(equalTo(true)));
+        verify(parent).isCustomPage(message, CustomPage.Type.OK_200);
+        verify(parent).isCustomPage(message, type);
+    }
+
+    @Test
+    void isPageAuthIssueShouldReturnFalseIfCustomPage200Matches() {
+        // Given
+        CustomPage.Type type = CustomPage.Type.AUTH_4XX;
+        given(parent.isCustomPage(message, type)).willReturn(true);
+        given(parent.isCustomPage(message, CustomPage.Type.OK_200)).willReturn(true);
+        given(parent.getAnalyser()).willReturn(analyser);
+        plugin.init(message, parent);
+        // When
+        boolean result = plugin.isPageAuthIssue(message);
+        // Then
+        assertThat(result, is(equalTo(false)));
+        verify(parent).isCustomPage(message, CustomPage.Type.OK_200);
+        verifyNoInteractions(analyser);
+    }
+
+    @Test
     void isSuccessShouldReturnTrueIfCustomPage200Matches() {
         // Given
         CustomPage.Type type = CustomPage.Type.OK_200;
@@ -1902,6 +2051,131 @@ class AbstractPluginUnitTest extends PluginTestUtils {
         // Then
         assertThat(result, is(equalTo(false)));
         verify(parent).isCustomPage(message, CustomPage.Type.NOTFOUND_404);
+    }
+
+    @Test
+    void shouldSendMessageWithScanRuleIdHeaderIfEnabled() throws IOException {
+        // Given
+        AbstractPlugin plugin = createDefaultPlugin();
+        ScannerParam scannerParam = mock(ScannerParam.class);
+        given(scannerParam.isInjectPluginIdInHeader()).willReturn(true);
+        given(parent.getScannerParam()).willReturn(scannerParam);
+        HttpSender httpSender = mock(HttpSender.class);
+        given(parent.getHttpSender()).willReturn(httpSender);
+        plugin.init(message, parent);
+        HttpMessage message = new HttpMessage(new URI("http://example.com/", true));
+        // When
+        plugin.sendAndReceive(message, true, true);
+        // Then
+        assertThat(
+                message.getRequestHeader().getHeader(HttpHeader.X_ZAP_SCAN_ID),
+                is(equalTo("123456789")));
+    }
+
+    @Test
+    void shouldSendMessageWithoutScanRuleIdHeaderIfDisabled() throws IOException {
+        // Given
+        AbstractPlugin plugin = createDefaultPlugin();
+        ScannerParam scannerParam = mock(ScannerParam.class);
+        given(scannerParam.isInjectPluginIdInHeader()).willReturn(false);
+        given(parent.getScannerParam()).willReturn(scannerParam);
+        HttpSender httpSender = mock(HttpSender.class);
+        given(parent.getHttpSender()).willReturn(httpSender);
+        plugin.init(message, parent);
+        HttpMessage message = new HttpMessage(new URI("http://example.com/", true));
+        // When
+        plugin.sendAndReceive(message, true, true);
+        // Then
+        assertThat(message.getRequestHeader().getHeader(HttpHeader.X_ZAP_SCAN_ID), is(nullValue()));
+    }
+
+    @ParameterizedTest
+    @MethodSource("methodsNoEnclosedContent")
+    void shouldNotAddContentLenthHeaderWhenNotExpected(String method) {
+        // Given
+        HttpMessage message = messageWithMethod(method);
+        // When
+        plugin.updateRequestContentLength(message);
+        // Then
+        assertContentLength(message.getRequestHeader(), null);
+    }
+
+    @ParameterizedTest
+    @MethodSource("methodsNoEnclosedContent")
+    void shouldRemoveExistingContentLengthHeaderWhenNotExpectedNorNeeded(String method) {
+        // Given
+        HttpMessage message = messageWithMethod(method);
+        message.getRequestHeader().setContentLength(1234);
+        // When
+        plugin.updateRequestContentLength(message);
+        // Then
+        assertContentLength(message.getRequestHeader(), null);
+    }
+
+    @ParameterizedTest
+    @MethodSource("allMethods")
+    void shouldAddContentLengthHeaderWhenNeeded(String method) {
+        // Given
+        HttpMessage message = messageWithMethod(method);
+        message.setRequestBody("1234");
+        // When
+        plugin.updateRequestContentLength(message);
+        // Then
+        assertContentLength(message.getRequestHeader(), "4");
+    }
+
+    @ParameterizedTest
+    @MethodSource("allMethodsExceptNoEnclosedContent")
+    void shouldAddZeroContentLengthHeaderWhenNeeded(String method) {
+        // Given
+        HttpMessage message = messageWithMethod(method);
+        // When
+        plugin.updateRequestContentLength(message);
+        // Then
+        assertContentLength(message.getRequestHeader(), "0");
+    }
+
+    @ParameterizedTest
+    @MethodSource("allMethods")
+    void shouldUpdateExistingContentLengthHeaderWhenNeeded(String method) {
+        // Given
+        HttpMessage message = messageWithMethod(method);
+        message.setRequestBody("1234");
+        message.getRequestHeader().setContentLength(42);
+        // When
+        plugin.updateRequestContentLength(message);
+        // Then
+        assertContentLength(message.getRequestHeader(), "4");
+    }
+
+    private static void assertContentLength(HttpHeader header, String value) {
+        assertThat(header.getHeader(HttpHeader.CONTENT_LENGTH), is(equalTo(value)));
+    }
+
+    private static HttpMessage messageWithMethod(String method) {
+        try {
+            String header =
+                    method
+                            + (HttpRequestHeader.CONNECT.equalsIgnoreCase(method)
+                                    ? " example.com "
+                                    : " / ")
+                            + "HTTP/1.1";
+            return new HttpMessage(new HttpRequestHeader(header));
+        } catch (HttpMalformedHeaderException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static Stream<String> allMethods() {
+        return Stream.of(HttpRequestHeader.METHODS);
+    }
+
+    private static Stream<String> methodsNoEnclosedContent() {
+        return METHODS_NO_ENCLOSED_CONTENT.stream();
+    }
+
+    private static Stream<String> allMethodsExceptNoEnclosedContent() {
+        return allMethods().filter(e -> !METHODS_NO_ENCLOSED_CONTENT.contains(e));
     }
 
     private static HttpMessage createAlertMessage() {

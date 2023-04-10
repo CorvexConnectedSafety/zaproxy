@@ -49,6 +49,7 @@ public class SqlTableAlert extends SqlAbstractTable implements TableAlert {
     private static final String SOLUTION = DbSQL.getSQL("alert.field.solution");
     private static final String REFERENCE = DbSQL.getSQL("alert.field.reference");
     private static final String EVIDENCE = DbSQL.getSQL("alert.field.evidence");
+    private static final String INPUT_VECTOR = DbSQL.getSQL("alert.field.inputvector");
     private static final String CWEID = DbSQL.getSQL("alert.field.cweid");
     private static final String WASCID = DbSQL.getSQL("alert.field.wascid");
     private static final String HISTORYID = DbSQL.getSQL("alert.field.historyid");
@@ -87,6 +88,10 @@ public class SqlTableAlert extends SqlAbstractTable implements TableAlert {
                 DbUtils.execute(connection, DbSQL.getSQL("alert.ps.addwascid"));
             }
 
+            if (!DbUtils.hasColumn(connection, TABLE_NAME, INPUT_VECTOR)) {
+                DbUtils.execute(connection, DbSQL.getSQL("alert.ps.addinputvector"));
+            }
+
             if (!DbUtils.hasIndex(connection, TABLE_NAME, ALERT_INDEX)) {
                 // this speeds up session loading
                 DbUtils.execute(connection, DbSQL.getSQL("alert.ps.addalertindex"));
@@ -105,9 +110,6 @@ public class SqlTableAlert extends SqlAbstractTable implements TableAlert {
         }
     }
 
-    /* (non-Javadoc)
-     * @see org.parosproxy.paros.db.paros.TableAlert#read(int)
-     */
     @Override
     public synchronized RecordAlert read(int alertId) throws DatabaseException {
         SqlPreparedStatementWrapper psRead = null;
@@ -124,9 +126,6 @@ public class SqlTableAlert extends SqlAbstractTable implements TableAlert {
         }
     }
 
-    /* (non-Javadoc)
-     * @see org.parosproxy.paros.db.paros.TableAlert#write(int, int, java.lang.String, int, int, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, int, int, int, int)
-     */
     @Override
     public synchronized RecordAlert write(
             int scanId,
@@ -147,7 +146,8 @@ public class SqlTableAlert extends SqlAbstractTable implements TableAlert {
             int historyId,
             int sourceHistoryId,
             int sourceId,
-            String alertRef)
+            String alertRef,
+            String inputVector)
             throws DatabaseException {
 
         SqlPreparedStatementWrapper psInsert = null;
@@ -172,6 +172,7 @@ public class SqlTableAlert extends SqlAbstractTable implements TableAlert {
             psInsert.getPs().setInt(17, sourceHistoryId);
             psInsert.getPs().setInt(18, sourceId);
             psInsert.getPs().setString(19, alertRef);
+            psInsert.getPs().setString(20, inputVector);
 
             psInsert.getPs().executeUpdate();
 
@@ -213,7 +214,8 @@ public class SqlTableAlert extends SqlAbstractTable implements TableAlert {
                                 rs.getInt(HISTORYID),
                                 rs.getInt(SOURCEHISTORYID),
                                 rs.getInt(SOURCEID),
-                                rs.getString(ALERTREF));
+                                rs.getString(ALERTREF),
+                                rs.getString(INPUT_VECTOR));
             }
             return alert;
         } catch (SQLException e) {
@@ -221,9 +223,6 @@ public class SqlTableAlert extends SqlAbstractTable implements TableAlert {
         }
     }
 
-    /* (non-Javadoc)
-     * @see org.parosproxy.paros.db.paros.TableAlert#deleteAlert(int)
-     */
     @Override
     public void deleteAlert(int alertId) throws DatabaseException {
         SqlPreparedStatementWrapper psDeleteAlert = null;
@@ -238,9 +237,6 @@ public class SqlTableAlert extends SqlAbstractTable implements TableAlert {
         }
     }
 
-    /* (non-Javadoc)
-     * @see org.parosproxy.paros.db.paros.TableAlert#deleteAllAlerts()
-     */
     @Override
     public int deleteAllAlerts() throws DatabaseException {
         SqlPreparedStatementWrapper psDeleteAllAlerts = null;
@@ -254,9 +250,6 @@ public class SqlTableAlert extends SqlAbstractTable implements TableAlert {
         }
     }
 
-    /* (non-Javadoc)
-     * @see org.parosproxy.paros.db.paros.TableAlert#update(int, java.lang.String, int, int, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, int, int, int)
-     */
     @Override
     public synchronized void update(
             int alertId,
@@ -273,7 +266,8 @@ public class SqlTableAlert extends SqlAbstractTable implements TableAlert {
             String evidence,
             int cweId,
             int wascId,
-            int sourceHistoryId)
+            int sourceHistoryId,
+            String inputVector)
             throws DatabaseException {
 
         SqlPreparedStatementWrapper psUpdate = null;
@@ -293,7 +287,8 @@ public class SqlTableAlert extends SqlAbstractTable implements TableAlert {
             psUpdate.getPs().setInt(12, cweId);
             psUpdate.getPs().setInt(13, wascId);
             psUpdate.getPs().setInt(14, sourceHistoryId);
-            psUpdate.getPs().setInt(15, alertId);
+            psUpdate.getPs().setString(15, inputVector);
+            psUpdate.getPs().setInt(16, alertId);
             psUpdate.getPs().executeUpdate();
         } catch (SQLException e) {
             throw new DatabaseException(e);
@@ -302,9 +297,6 @@ public class SqlTableAlert extends SqlAbstractTable implements TableAlert {
         }
     }
 
-    /* (non-Javadoc)
-     * @see org.parosproxy.paros.db.paros.TableAlert#updateHistoryIds(int, int, int)
-     */
     @Override
     public synchronized void updateHistoryIds(int alertId, int historyId, int sourceHistoryId)
             throws DatabaseException {
@@ -324,9 +316,6 @@ public class SqlTableAlert extends SqlAbstractTable implements TableAlert {
         }
     }
 
-    /* (non-Javadoc)
-     * @see org.parosproxy.paros.db.paros.TableAlert#getAlertsBySourceHistoryId(int)
-     */
     @Override
     public List<RecordAlert> getAlertsBySourceHistoryId(int historyId) throws DatabaseException {
         SqlPreparedStatementWrapper psGetAlertsForHistoryId = null;

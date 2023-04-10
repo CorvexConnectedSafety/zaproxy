@@ -1,14 +1,16 @@
 import japicmp.model.JApiChangeStatus
-import java.time.LocalDate
-import java.util.stream.Collectors
 import me.champeau.gradle.japicmp.JapicmpTask
 import org.zaproxy.zap.japicmp.AcceptMethodAbstractNowDefaultRule
 import org.zaproxy.zap.tasks.GradleBuildWithGitRepos
+import java.time.LocalDate
+import java.util.stream.Collectors
 
 plugins {
     `java-library`
     jacoco
     id("me.champeau.gradle.japicmp")
+    id("org.zaproxy.common") version "0.1.0"
+    id("org.zaproxy.crowdin") version "0.3.1"
     org.zaproxy.zap.distributions
     org.zaproxy.zap.installers
     org.zaproxy.zap.`github-releases`
@@ -19,91 +21,83 @@ plugins {
 }
 
 group = "org.zaproxy"
-version = "2.11.0-SNAPSHOT"
-val versionBC = "2.10.0"
+version = "2.13.0-SNAPSHOT"
+val versionBC = "2.12.0"
 
 val versionLangFile = "1"
 val creationDate by extra { project.findProperty("creationDate") ?: LocalDate.now().toString() }
 val distDir = file("src/main/dist/")
 
 java {
-    // Compile ZAP with Java 8 when building releases.
-    if (System.getenv("GITHUB_REF")?.contains("refs/tags/") ?: false) {
+    // Compile with appropriate Java version when building ZAP releases.
+    if (System.getenv("ZAP_RELEASE") != null) {
         toolchain {
-            languageVersion.set(JavaLanguageVersion.of(8))
+            languageVersion.set(JavaLanguageVersion.of(System.getenv("ZAP_JAVA_VERSION")))
         }
     } else {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        val javaVersion = JavaVersion.VERSION_11
+        sourceCompatibility = javaVersion
+        targetCompatibility = javaVersion
     }
 }
 
-jacoco {
-    toolVersion = "0.8.6"
+crowdin {
+    credentials {
+        token.set(System.getenv("CROWDIN_AUTH_TOKEN"))
+    }
+
+    configuration {
+        file.set(file("gradle/crowdin.yml"))
+    }
 }
 
 tasks.named<JacocoReport>("jacocoTestReport") {
     reports {
-        xml.isEnabled = true
+        xml.required.set(true)
     }
 }
 
 dependencies {
-    api("com.fifesoft:rsyntaxtextarea:3.1.3")
+    api("com.fifesoft:rsyntaxtextarea:3.3.2")
     api("com.github.zafarkhaja:java-semver:0.9.0")
     api("commons-beanutils:commons-beanutils:1.9.4")
     api("commons-codec:commons-codec:1.15")
     api("commons-collections:commons-collections:3.2.2")
     api("commons-configuration:commons-configuration:1.10")
     api("commons-httpclient:commons-httpclient:3.1")
-    api("commons-io:commons-io:2.8.0")
+    api("commons-io:commons-io:2.11.0")
     api("commons-lang:commons-lang:2.6")
     api("org.apache.commons:commons-lang3:3.12.0")
-    api("org.apache.commons:commons-text:1.9")
+    api("org.apache.commons:commons-text:1.10.0")
     api("edu.umass.cs.benchlab:harlib:1.1.3")
     api("javax.help:javahelp:2.0.05")
-    val log4jVersion = "2.14.1"
+    val log4jVersion = "2.19.0"
     api("org.apache.logging.log4j:log4j-api:$log4jVersion")
     api("org.apache.logging.log4j:log4j-1.2-api:$log4jVersion")
     implementation("org.apache.logging.log4j:log4j-core:$log4jVersion")
     api("net.htmlparser.jericho:jericho-html:3.4")
     api("net.sf.json-lib:json-lib:2.4:jdk15")
-    api("org.apache.commons:commons-csv:1.8")
-    val bcVersion = "1.68"
-    api("org.bouncycastle:bcmail-jdk15on:$bcVersion")
-    api("org.bouncycastle:bcprov-jdk15on:$bcVersion")
-    api("org.bouncycastle:bcpkix-jdk15on:$bcVersion")
-    api("org.hsqldb:hsqldb:2.5.2")
+    api("org.apache.commons:commons-csv:1.9.0")
+    api("org.hsqldb:hsqldb:2.7.1")
     api("org.jfree:jfreechart:1.5.3")
     api("org.jgrapht:jgrapht-core:0.9.0")
     api("org.swinglabs.swingx:swingx-all:1.6.5-1")
-    api("org.xerial:sqlite-jdbc:3.34.0")
 
-    implementation("commons-validator:commons-validator:1.7")
-    // Don't need its dependencies, for now.
-    implementation("org.jitsi:ice4j:3.0-24-g34c2ce5") {
-        setTransitive(false)
-    }
-    implementation("com.formdev:flatlaf:1.2")
+    implementation("com.formdev:flatlaf:3.0")
 
-    runtimeOnly("commons-jxpath:commons-jxpath:1.3")
     runtimeOnly("commons-logging:commons-logging:1.2")
-    runtimeOnly("xom:xom:1.3.7") {
+    runtimeOnly("xom:xom:1.3.8") {
         setTransitive(false)
     }
 
-    testImplementation("com.github.tomakehurst:wiremock-jre8:2.28.0") {
-        // Not needed.
-        exclude(group = "org.junit")
-    }
-    testImplementation("org.hamcrest:hamcrest-all:1.3")
-    val jupiterVersion = "5.7.0"
+    testImplementation("net.bytebuddy:byte-buddy:1.14.0")
+    testImplementation("org.hamcrest:hamcrest-core:2.2")
+    val jupiterVersion = "5.9.2"
     testImplementation("org.junit.jupiter:junit-jupiter-api:$jupiterVersion")
     testImplementation("org.junit.jupiter:junit-jupiter-params:$jupiterVersion")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:$jupiterVersion")
-    testImplementation("org.mockito:mockito-junit-jupiter:3.6.28")
+    testImplementation("org.mockito:mockito-junit-jupiter:5.1.1")
     testImplementation("org.apache.logging.log4j:log4j-slf4j-impl:$log4jVersion")
-    testImplementation("org.nanohttpd:nanohttpd-webserver:2.3.1")
 
     testRuntimeOnly(files(distDir))
 
@@ -114,7 +108,7 @@ tasks.register<JavaExec>("run") {
     group = ApplicationPlugin.APPLICATION_GROUP
     description = "Runs ZAP from source, using the default dev home."
 
-    main = "org.zaproxy.zap.ZAP"
+    mainClass.set("org.zaproxy.zap.ZAP")
     classpath = sourceSets["main"].runtimeClasspath
     workingDir = distDir
 }
@@ -127,10 +121,11 @@ listOf("jar", "jarDaily").forEach {
         fileMode = "0644".toIntOrNull(8)
 
         val attrs = mapOf(
-                "Main-Class" to "org.zaproxy.zap.ZAP",
-                "Implementation-Version" to ToString({ archiveVersion.get() }),
-                "Create-Date" to creationDate,
-                "Class-Path" to ToString({ configurations.runtimeClasspath.get().files.stream().map { file -> "lib/${file.name}" }.sorted().collect(Collectors.joining(" ")) }))
+            "Main-Class" to "org.zaproxy.zap.ZAP",
+            "Implementation-Version" to ToString({ archiveVersion.get() }),
+            "Create-Date" to creationDate,
+            "Class-Path" to ToString({ configurations.runtimeClasspath.get().files.stream().map { file -> "lib/${file.name}" }.sorted().collect(Collectors.joining(" ")) }),
+        )
 
         manifest {
             attributes(attrs)
@@ -142,26 +137,31 @@ val japicmp by tasks.registering(JapicmpTask::class) {
     group = LifecycleBasePlugin.VERIFICATION_GROUP
     description = "Checks ${project.name}.jar binary compatibility with latest version ($versionBC)."
 
-    oldClasspath = files(zapJar(versionBC))
-    newClasspath = files(tasks.named<Jar>(JavaPlugin.JAR_TASK_NAME).map { it.archivePath })
-    setIgnoreMissingClasses(true)
+    oldClasspath.from(zapJar(versionBC))
+    newClasspath.from(tasks.named<Jar>(JavaPlugin.JAR_TASK_NAME))
+    ignoreMissingClasses.set(true)
 
-    packageExcludes = listOf(
-        // Deprecated in 2.10, removal part of 2.11 milestone
-        "org.parosproxy.paros.extension.encoder",
-        "org.zaproxy.zap.extension.encoder2")
+    packageExcludes.set(listOf())
 
-    fieldExcludes = listOf()
+    fieldExcludes.set(listOf())
 
-    classExcludes = listOf(
-        "org.zaproxy.zap.extension.custompages.ContextCustomPagePanel\$CustomPagesMultipleOptionsPanel")
+    classExcludes.set(
+        listOf(
+            "org.zaproxy.zap.network.HttpSenderImpl",
+        ),
+    )
 
-    methodExcludes = listOf()
+    methodExcludes.set(
+        listOf(
+            "org.parosproxy.paros.extension.ViewDelegate#getOptionsButton(java.lang.String, java.lang.String)",
+            "org.parosproxy.paros.extension.ViewDelegate#getHelpButton(java.lang.String)",
+        ),
+    )
 
     richReport {
-        destinationDir = file("$buildDir/reports/japicmp/")
-        reportName = "japi.html"
-        isAddDefaultRules = true
+        destinationDir.set(file("$buildDir/reports/japicmp/"))
+        reportName.set("japi.html")
+        addDefaultRules.set(true)
         addRule(JApiChangeStatus.MODIFIED, AcceptMethodAbstractNowDefaultRule::class.java)
     }
 }
@@ -230,20 +230,21 @@ val generateAllApiEndpoints by tasks.registering {
 }
 
 listOf(
+    "org.zaproxy.zap.extension.api.DotNetAPIGenerator",
     "org.zaproxy.zap.extension.api.GoAPIGenerator",
     "org.zaproxy.zap.extension.api.JavaAPIGenerator",
     "org.zaproxy.zap.extension.api.NodeJSAPIGenerator",
     "org.zaproxy.zap.extension.api.PhpAPIGenerator",
     "org.zaproxy.zap.extension.api.PythonAPIGenerator",
     "org.zaproxy.zap.extension.api.RustAPIGenerator",
-    "org.zaproxy.zap.extension.api.WikiAPIGenerator"
+    "org.zaproxy.zap.extension.api.WikiAPIGenerator",
 ).forEach {
     val langName = it.removePrefix("org.zaproxy.zap.extension.api.").removeSuffix("APIGenerator")
     val task = tasks.register<JavaExec>("generate${langName}ApiEndpoints") {
         group = "ZAP Misc"
         description = "Generates (and copies) the ZAP API endpoints for $langName."
 
-        main = it
+        mainClass.set(it)
         classpath = sourceSets["main"].runtimeClasspath
         workingDir = file("$rootDir")
     }

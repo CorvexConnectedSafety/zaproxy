@@ -65,6 +65,9 @@ def load_custom_hooks(hooks_file=None):
     """ Loads a custom python module which modifies zap scripts behaviour
     hooks_file - a python file which defines custom hooks
     """
+
+    provided_hooks = True if hooks_file or os.environ.get('ZAP_HOOKS') else False
+
     global zap_hooks
     hooks_file = hooks_file if hooks_file else os.environ.get('ZAP_HOOKS', '~/.zap_hooks.py')
     hooks_file = os.path.expanduser(hooks_file)
@@ -76,7 +79,8 @@ def load_custom_hooks(hooks_file=None):
             hooks_file = hooks_file2
         
     if not os.path.exists(hooks_file):
-        logging.warning('Could not find custom hooks file at %s ' % os.path.abspath(hooks_file))
+        if provided_hooks:
+            logging.warning('Could not find custom hooks file at %s ' % os.path.abspath(hooks_file))
         return
 
     loader = SourceFileLoader("zap_hooks", hooks_file)
@@ -270,7 +274,7 @@ def add_zap_options(params, zap_options):
 
 def create_start_options(mode, port, extra_params):
     params = [
-        'zap-x.sh', mode,
+        '/zap/zap-x.sh', mode,
         '-port', str(port),
         '-host', '0.0.0.0',
         '-config', 'database.recoverylog=false',
@@ -589,24 +593,24 @@ def zap_set_scan_user(zap, username):
             return
     raise UserInputException('ZAP failed to find user: {0}'.format(username))
 
-def get_af_env(targets, debug):
+def get_af_env(targets, out_of_scope_dict, debug):
+    exclude = []
+    # '*' rules apply to all scan rules so can just be added to the context exclusions
+    if '*' in out_of_scope_dict:
+        for rule in out_of_scope_dict['*']:
+            exclude.append(rule.pattern)
+    
     return {
             'env': {
                 'contexts': [{
                     'name': 'baseline',
-                    'urls': targets
+                    'urls': targets,
+                    'excludePaths': exclude
                     }],
                 'parameters': {
                     'failOnError': True,
                     'progressToStdout': debug}
                 }
-        }
-
-def get_af_addons(addons_install, addons_uninstall):
-    return {
-        'type': 'addOns',
-        'install': addons_install,
-        'uninstall': addons_uninstall
         }
 
 def get_af_pscan_config(max_alerts=10):
@@ -651,7 +655,7 @@ def get_af_report(template, dir, file, title, description):
             'reportDescription': description}
         }
 
-def get_af_output_summary(format, summaryFile, config_dict):
+def get_af_output_summary(format, summaryFile, config_dict, config_msg):
     obj = {
         'type': 'outputSummary',
         'parameters': {
@@ -660,6 +664,15 @@ def get_af_output_summary(format, summaryFile, config_dict):
         }
     rules = []
     for id, action in config_dict.items():
-        rules.append({'id': int(id), 'action': action})
+        if id in config_msg:
+            rules.append({'id': int(id), 'action': action, 'customMessage': config_msg[id]})
+        else:
+            rules.append({'id': int(id), 'action': action})
     obj['rules'] = rules
     return obj
+
+def get_af_alertFilter(alertFilters):
+    return {
+        'type': 'alertFilter',
+        'alertFilters': alertFilters
+    }

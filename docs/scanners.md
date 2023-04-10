@@ -1,12 +1,12 @@
-ZAP Scanners
-============
-The registry of scanners' (passive, active, custom...) IDs.
+ZAP Scan Rules
+==============
+The registry of scan rules' (passive, active, custom...) IDs.
 
 Format: `<ID> <NAME>`
 
-If the scanner is no longer in use: `<ID> <NAME> [Deprecated]`
+If the scan rule is no longer in use: `<ID> <NAME> [Deprecated]`
 
-Scanners:
+Scan rules:
 ```
 0       Directory browsing
 1       Potential File Path Manipulation
@@ -36,7 +36,7 @@ Scanners:
 10017   Cross-domain JavaScript source file inclusion
 10018   Untrusted domains in JavaScript source code
 10019   Content-Type header missing
-10020   X-Frame-Options header not set
+10020   Anti-clickjacking Header
 10021   X-Content-Type-Options header missing
 10022   Information disclosure - database error messages [Deprecated]
 10023   Information disclosure - debug error messages
@@ -69,7 +69,7 @@ Scanners:
 10050   Retrieved from Cache
 10051   Relative Path Confusion
 10052   X-ChromeLogger-Data Header Information Leak
-10053   Apache Range Header DoS (CVE-2011-3192)
+10053   Apache Range Header DoS (CVE-2011-3192) [Deprecated]
 10054   Cookie set without SameSite attribute
 10055   Content Security Policy Scanner
 10056   X-Debug-Token Scanner
@@ -99,6 +99,8 @@ Scanners:
 10108   Blank link target
 10109   Modern Web Application (info)
 10110   Dangerous JS Function Scanner
+10111   Authentication Request Detection (info)
+10112   Session Handling Detection (info)
 
 10200   Beast (via HTTPS Info Extension)
 10201   Crime (via HTTPS Info Extension)
@@ -145,15 +147,15 @@ Scanners:
 40016   Persistent XSS (Prime)
 40017   Persistent XSS (Spider)
 40018   SQL Injection
-40019   SQL Injection MySQL
-40020   SQL Injection Hypersonic
-40021   SQL Injection Oracle
-40022   SQL Injection Postgresql
+40019   SQL Injection MySQL (Timing Based)
+40020   SQL Injection Hypersonic (Timing Based)
+40021   SQL Injection Oracle (Timing Based)
+40022   SQL Injection Postgresql (Timing Based)
 40023   Username Enumeration
 40024   SQL Injection SQLite
 40025   Proxy Disclosure
 40026   Cross site scripting (DOM)
-40027   SQL Injection MsSQL
+40027   SQL Injection MsSQL (Timing Based)
 40028   ELMAH Scanner
 40029   trace.axd Scanner
 40030   Backslash Powered Scanner
@@ -167,6 +169,13 @@ Scanners:
 40038   Bypassing 403
 40039   Web Cache Deception
 40040	CORS active scan rule
+40041   FileUpload Scanner
+40042   Spring Actuator Test
+40043   Log4Shell (CVE-2021-44228, CVE-2021-45046)
+40044   Exponential Entity Expansion (Billion Laughs Attack)
+40045   Spring4Shell (CVE-2022-22965)
+40046   Server Side Request Forgery
+40047   Text4Shell (CVE-2022-42889)
 
 50000   Active Scan scripts
 50001   Passive Scan scripts
@@ -205,6 +214,9 @@ Scanners:
 90034   Cloud Metadata Attack
 90035   Server Side Template Injection
 90036   Server Side Template Injection (Blind)
+90037   Command Injection (Timing Based)
+90038   SQL Injection SQLite (Timing Based)
+90039   NoSQL Injection MongoDB (Timing Based)
 
 100000  Client/Server HTTP Error Response Codes [Script]
 100001  Unexpected Content Types [Script]
@@ -230,6 +242,16 @@ Scanners:
 100021  Telerik Cryptographic Weakness [Script]
 100022  Upload Form Discovery [Script]
 100023  Information Leak - X-Powered-By Header [Script]
+100024  Unauthenticated Gitlab SSRF (CVE-2021-22214) [Script]
+100025  Cross Site WebSocket Hijacking [Script]
+100026  JWT None Exploit [Script]
+100027  Test Insecure HTTP Verbs [Script]
+100028  User defined attacks [Script]
+100029  File Content Disclosure (CVE-2019-5418) [Script]
+100030  Good Old Files Lite [Script]
+100031  DNS Email Spoofing [Script]
+100032  WordPress Username Enumeration [Script]
+100033  Server Side Template Injection [Script]
 
 110000  Websocket Passive Scan scripts
 110001  Application Error Disclosure [Script]
