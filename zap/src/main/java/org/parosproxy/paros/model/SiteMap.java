@@ -490,7 +490,9 @@ public class SiteMap extends SortedTreeModel {
 
     private SiteNode findAndAddChild(
             SiteNode parent, String nodeName, HistoryReference baseRef, HttpMessage baseMsg)
-            throws URIException, HttpMalformedHeaderException, NullPointerException,
+            throws URIException,
+                    HttpMalformedHeaderException,
+                    NullPointerException,
                     DatabaseException {
         LOGGER.debug("findAndAddChild {} / {}", parent.getNodeName(), nodeName);
         if (isReferenceCached(baseRef)) {
@@ -617,14 +619,18 @@ public class SiteMap extends SortedTreeModel {
 
     public HistoryReference createReference(
             SiteNode node, HistoryReference baseRef, HttpMessage base)
-            throws HttpMalformedHeaderException, DatabaseException, URIException,
+            throws HttpMalformedHeaderException,
+                    DatabaseException,
+                    URIException,
                     NullPointerException {
         return createReference(node.getPath(), baseRef, base);
     }
 
     private HistoryReference createReference(
             TreeNode[] path, HistoryReference baseRef, HttpMessage base)
-            throws HttpMalformedHeaderException, DatabaseException, URIException,
+            throws HttpMalformedHeaderException,
+                    DatabaseException,
+                    URIException,
                     NullPointerException {
         StringBuilder sb = new StringBuilder();
         String nodeName;
@@ -865,22 +871,5 @@ class SortedTreeModel extends DefaultTreeModel {
             return findIndexFor(child, parent, idx1, half);
         }
         return findIndexFor(child, parent, half + 1, idx2);
-    }
-}
-
-class SiteNodeStringComparator implements Comparator<SiteNode> {
-    @Override
-    public int compare(SiteNode sn1, SiteNode sn2) {
-        String s1 = sn1.getName();
-        String s2 = sn2.getName();
-        int initialComparison = s1.compareToIgnoreCase(s2);
-
-        if (initialComparison == 0) {
-            s1 = sn1.getNodeName();
-            s2 = sn2.getNodeName();
-
-            return s1.compareToIgnoreCase(s2);
-        }
-        return initialComparison;
     }
 }

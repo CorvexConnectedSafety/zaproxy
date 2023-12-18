@@ -1,6 +1,49 @@
 # Changelog
 All notable changes to the docker containers will be documented in this file.
 
+### 2023-12-14
+- Updated to use Webswing 23.2.2 (Issue 8244).
+
+### 2023-12-12
+- Parsing the config file ignores empty lines that are containing whitespaces only (Issue 8237).
+
+### 2023-12-07
+- Give better error on failing to parse the config file.
+
+### 2023-12-06
+- Alert_on_Unexpected_Content_Types.js > Added Content-Type text/xml to the list of expected types (Issue 8226).
+
+### 2023-10-30
+- Add the ZAP client profile to stable, weekly, and live images.
+
+### 2023-08-23
+- Python 3.6 and 3.7 are no longer supported.
+
+### 2023-08-09
+- Install the newer Python ZAP API client directly, `python-owasp-zap-v2.4` was renamed to `zaproxy`.
+
+### 2023-08-07
+- The default name for ZAP's Root CA certificate and key was changed from `owasp_zap_root_ca` to `zap_root_ca`, in the Webswing script (`zap-webswing.sh`).
+
+### 2023-08-04
+- The packaged scans, when executed directly, will now use the image from the GitHub Container Registry.
+
+### 2023-08-02
+- Start publishing images under the `softwaresecurityproject` organization on Docker Hub, in addition to the existing images.
+
+### 2023-07-07
+- Remove checks for CFU initiator in HTTP Sender scripts, no longer needed.
+
+### 2023-06-08
+- Start publishing images to the GitHub Container Registry. Use tags instead of image names for various flavours of the
+  images; some examples are:
+  - `ghcr.io/zaproxy/zaproxy:20230608-stable` instead of `owasp/zap2docker-stable:s2023-06-08`
+  - `ghcr.io/zaproxy/zaproxy:weekly` instead of `owasp/zap2docker-weekly:latest`
+  - `ghcr.io/zaproxy/zaproxy:nightly` instead of `owasp/zap2docker-live:latest`
+
+### 2023-05-05
+ - Do not install/update add-ons if ZAP '-silent' option specified (Issue 4633).
+
 ### 2023-02-03
  - Alert_on_Unexpected_Content_Types.js > Added Content-Type application/hal+json to the list of expected types.
 

@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -42,9 +43,10 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 import org.apache.commons.configuration.SubnodeConfiguration;
-import org.apache.commons.lang.ArrayUtils;
-import org.apache.commons.lang.StringUtils;
-import org.apache.commons.lang.SystemUtils;
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.SystemUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -72,6 +74,16 @@ public class AddOn {
      * @since 2.6.0
      */
     public static final String MANIFEST_FILE_NAME = "ZapAddOn.xml";
+
+    /**
+     * The name of the SBOM file, contained in the add-ons.
+     *
+     * <p>The SBOM file is expected to be in the root of the ZIP file, but may not be present for
+     * 3rd party add-ons.
+     *
+     * @since 2.14.0
+     */
+    protected static final String BOM_FILE_NAME = "bom.json";
 
     public enum Status {
         unknown,
@@ -231,12 +243,14 @@ public class AddOn {
     private String name;
     private String description = "";
     private String author = "";
+
     /**
      * The version declared in the manifest file.
      *
      * <p>Never {@code null}.
      */
     private Version version;
+
     /**
      * The (semantic) version declared in the manifest file, to be replaced by {@link #version}.
      *
@@ -2438,5 +2452,30 @@ public class AddOn {
             intVersion += javaVersions[2];
         }
         return intVersion;
+    }
+
+    /**
+     * Returns the SBOM. May be null, e.g. for 3rd party add-ons.
+     *
+     * @return the SBOM.
+     * @since 2.14.0
+     */
+    public String getSbom() {
+        if (file != null && file.exists()) {
+            // Might not exist in the tests
+            try (ZipFile zip = new ZipFile(file)) {
+                ZipEntry zapAddOnEntry = zip.getEntry(BOM_FILE_NAME);
+                if (zapAddOnEntry == null) {
+                    return null;
+                }
+
+                try (InputStream zis = zip.getInputStream(zapAddOnEntry)) {
+                    return IOUtils.toString(zis, StandardCharsets.UTF_8);
+                }
+            } catch (Exception e) {
+                // Ignore
+            }
+        }
+        return null;
     }
 }

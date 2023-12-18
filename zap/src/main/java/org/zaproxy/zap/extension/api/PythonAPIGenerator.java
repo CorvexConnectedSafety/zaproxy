@@ -34,6 +34,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.ResourceBundle;
 import java.util.stream.Collectors;
+import org.parosproxy.paros.network.HttpRequestHeader;
 
 public class PythonAPIGenerator extends AbstractAPIGenerator {
 
@@ -149,17 +150,6 @@ public class PythonAPIGenerator extends AbstractAPIGenerator {
                             .map(name -> "'" + name + "': " + name.toLowerCase(Locale.ROOT))
                             .collect(Collectors.joining(", "));
             reqParams.append(mandatoryParameters);
-            if (type.equals(ACTION_ENDPOINT) || type.equals(OTHER_ENDPOINT)) {
-                // Always add the API key - we've no way of knowing if it will be required or not
-                if (!mandatoryParameters.isEmpty()) {
-                    reqParams.append(", ");
-                }
-                reqParams
-                        .append("'")
-                        .append(API.API_KEY_PARAM)
-                        .append("': ")
-                        .append(API.API_KEY_PARAM);
-            }
             reqParams.append("}");
 
             List<ApiParameter> optionalParameters =
@@ -202,6 +192,13 @@ public class PythonAPIGenerator extends AbstractAPIGenerator {
         // , {'url': url}))
         if (hasParams) {
             out.write(", ");
+            String httpMethod = element.getDefaultMethod();
+            if (!HttpRequestHeader.GET.equalsIgnoreCase(httpMethod)) {
+                out.write("method=\"");
+                out.write(httpMethod);
+                out.write('"');
+                out.write(", body=");
+            }
             out.write(reqParams.toString());
             out.write(")");
             if (!type.equals(OTHER_ENDPOINT)) {

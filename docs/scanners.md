@@ -101,12 +101,14 @@ Scan rules:
 10110   Dangerous JS Function Scanner
 10111   Authentication Request Detection (info)
 10112   Session Handling Detection (info)
+10113   Verification Detection (info)
+10114   Same Origin Method Execution (SOME)
 
-10200   Beast (via HTTPS Info Extension)
-10201   Crime (via HTTPS Info Extension)
+10200   Beast (via HTTPS Info Extension) [Deprecated]
+10201   Crime (via HTTPS Info Extension) [Deprecated]
 10202   Absence of Anti-CSRF Tokens
-10203   Freak (via HTTPS Info Extension)
-10204   Robot (via HTTPS Info Extension)
+10203   Freak (via HTTPS Info Extension) [Deprecated]
+10204   Robot (via HTTPS Info Extension) [Deprecated]
 
 20000   Cold Fusion default file [Deprecated]
 20001   Lotus Domino default files [Deprecated]
@@ -184,6 +186,7 @@ Scan rules:
 50004   Zest scripts (Action - Fail)
 50005   Client side Active Scan scripts
 50006   Client side Passive Scan scripts
+50007   GraphQL Add-on
 
 60000   Example simple passive rule
 60001   Example file passive rule
@@ -194,7 +197,8 @@ Scan rules:
 90001   Insecure JSF ViewState
 90002   Java Serialized Object
 90003   Subresource Integrity Attribute Missing
-90004   Cross-Origin Resource Policy
+90004   Cross-Origin Resource Policy [Site Isolation Headers (Spectre)]
+90005   Fetch Metadata Request Headers
 90011   Charset Mismatch
 90017	XSLT Injection
 90018   SQL Injection SQLMap
@@ -217,6 +221,7 @@ Scan rules:
 90037   Command Injection (Timing Based)
 90038   SQL Injection SQLite (Timing Based)
 90039   NoSQL Injection MongoDB (Timing Based)
+90040   DNS add-on SPF rule
 
 100000  Client/Server HTTP Error Response Codes [Script]
 100001  Unexpected Content Types [Script]
@@ -262,6 +267,11 @@ Scan rules:
 110006  Private IP Disclosure [Script]
 110007  Username Disclosure [Script]
 110008  Suspicious XML Comments Disclosure [Script]
+110009  Full Path Disclosure Scan
+
+120000  Information Disclosure - Information in Browser Storage
+120001  Information Disclosure - Sensitive Information in Browser Storage
+120002  Information Disclosure - JWT in Browser Storage
 
 322420463 Retire.js (3rd Party)
 

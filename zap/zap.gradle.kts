@@ -1,15 +1,19 @@
 import japicmp.model.JApiChangeStatus
 import me.champeau.gradle.japicmp.JapicmpTask
+import org.zaproxy.gradle.spotless.ValidateImports
 import org.zaproxy.zap.japicmp.AcceptMethodAbstractNowDefaultRule
 import org.zaproxy.zap.tasks.GradleBuildWithGitRepos
+import org.zaproxy.zap.tasks.internal.JapicmpExcludedData
 import java.time.LocalDate
 import java.util.stream.Collectors
 
 plugins {
     `java-library`
     jacoco
+    id("com.diffplug.spotless")
     id("me.champeau.gradle.japicmp")
-    id("org.zaproxy.common") version "0.1.0"
+    id("org.cyclonedx.bom")
+    id("org.zaproxy.common")
     id("org.zaproxy.crowdin") version "0.3.1"
     org.zaproxy.zap.distributions
     org.zaproxy.zap.installers
@@ -21,8 +25,7 @@ plugins {
 }
 
 group = "org.zaproxy"
-version = "2.13.0-SNAPSHOT"
-val versionBC = "2.12.0"
+val versionBC = project.property("zap.japicmp.baseversion") as String
 
 val versionLangFile = "1"
 val creationDate by extra { project.findProperty("creationDate") ?: LocalDate.now().toString() }
@@ -57,46 +60,60 @@ tasks.named<JacocoReport>("jacocoTestReport") {
     }
 }
 
+spotless {
+    java {
+        bumpThisNumberIfACustomStepChanges(1)
+        custom(
+            "validateImports",
+            ValidateImports(
+                mapOf(
+                    "import org.apache.commons.lang." to
+                        "Import/use classes from Commons Lang 3, instead of Lang 2.",
+                ),
+            ),
+        )
+    }
+}
+
 dependencies {
-    api("com.fifesoft:rsyntaxtextarea:3.3.2")
+    api("com.fifesoft:rsyntaxtextarea:3.3.4")
     api("com.github.zafarkhaja:java-semver:0.9.0")
     api("commons-beanutils:commons-beanutils:1.9.4")
-    api("commons-codec:commons-codec:1.15")
+    api("commons-codec:commons-codec:1.16.0")
     api("commons-collections:commons-collections:3.2.2")
     api("commons-configuration:commons-configuration:1.10")
     api("commons-httpclient:commons-httpclient:3.1")
-    api("commons-io:commons-io:2.11.0")
+    api("commons-io:commons-io:2.15.0")
     api("commons-lang:commons-lang:2.6")
-    api("org.apache.commons:commons-lang3:3.12.0")
-    api("org.apache.commons:commons-text:1.10.0")
+    api("org.apache.commons:commons-lang3:3.14.0")
+    api("org.apache.commons:commons-text:1.11.0")
     api("edu.umass.cs.benchlab:harlib:1.1.3")
     api("javax.help:javahelp:2.0.05")
-    val log4jVersion = "2.19.0"
+    val log4jVersion = "2.20.0"
     api("org.apache.logging.log4j:log4j-api:$log4jVersion")
     api("org.apache.logging.log4j:log4j-1.2-api:$log4jVersion")
     implementation("org.apache.logging.log4j:log4j-core:$log4jVersion")
+    implementation("org.apache.logging.log4j:log4j-jul:$log4jVersion")
     api("net.htmlparser.jericho:jericho-html:3.4")
     api("net.sf.json-lib:json-lib:2.4:jdk15")
-    api("org.apache.commons:commons-csv:1.9.0")
-    api("org.hsqldb:hsqldb:2.7.1")
-    api("org.jfree:jfreechart:1.5.3")
+    api("org.apache.commons:commons-csv:1.10.0")
+    api("org.hsqldb:hsqldb:2.7.2")
+    api("org.jfree:jfreechart:1.5.4")
     api("org.jgrapht:jgrapht-core:0.9.0")
     api("org.swinglabs.swingx:swingx-all:1.6.5-1")
 
-    implementation("com.formdev:flatlaf:3.0")
+    implementation("com.formdev:flatlaf:3.2.5")
 
     runtimeOnly("commons-logging:commons-logging:1.2")
-    runtimeOnly("xom:xom:1.3.8") {
+    runtimeOnly("xom:xom:1.3.9") {
         setTransitive(false)
     }
 
-    testImplementation("net.bytebuddy:byte-buddy:1.14.0")
+    testImplementation("net.bytebuddy:byte-buddy:1.14.10")
     testImplementation("org.hamcrest:hamcrest-core:2.2")
-    val jupiterVersion = "5.9.2"
-    testImplementation("org.junit.jupiter:junit-jupiter-api:$jupiterVersion")
-    testImplementation("org.junit.jupiter:junit-jupiter-params:$jupiterVersion")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:$jupiterVersion")
-    testImplementation("org.mockito:mockito-junit-jupiter:5.1.1")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.1")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("org.mockito:mockito-junit-jupiter:5.7.0")
     testImplementation("org.apache.logging.log4j:log4j-slf4j-impl:$log4jVersion")
 
     testRuntimeOnly(files(distDir))
@@ -113,7 +130,7 @@ tasks.register<JavaExec>("run") {
     workingDir = distDir
 }
 
-listOf("jar", "jarDaily").forEach {
+listOf("jar", "jarDaily", "jarWithBom").forEach {
     tasks.named<Jar>(it) {
         isPreserveFileTimestamps = false
         isReproducibleFileOrder = true
@@ -141,25 +158,17 @@ val japicmp by tasks.registering(JapicmpTask::class) {
     newClasspath.from(tasks.named<Jar>(JavaPlugin.JAR_TASK_NAME))
     ignoreMissingClasses.set(true)
 
-    packageExcludes.set(listOf())
+    var excludedDataFile = "$projectDir/gradle/japicmp.yaml"
+    inputs.file(excludedDataFile)
 
-    fieldExcludes.set(listOf())
-
-    classExcludes.set(
-        listOf(
-            "org.zaproxy.zap.network.HttpSenderImpl",
-        ),
-    )
-
-    methodExcludes.set(
-        listOf(
-            "org.parosproxy.paros.extension.ViewDelegate#getOptionsButton(java.lang.String, java.lang.String)",
-            "org.parosproxy.paros.extension.ViewDelegate#getHelpButton(java.lang.String)",
-        ),
-    )
+    var excludedData = JapicmpExcludedData.from(excludedDataFile)
+    packageExcludes.set(excludedData.packageExcludes)
+    fieldExcludes.set(excludedData.fieldExcludes)
+    classExcludes.set(excludedData.classExcludes)
+    methodExcludes.set(excludedData.methodExcludes)
 
     richReport {
-        destinationDir.set(file("$buildDir/reports/japicmp/"))
+        destinationDir.set(layout.buildDirectory.dir("reports/japicmp"))
         reportName.set("japi.html")
         addDefaultRules.set(true)
         addRule(JApiChangeStatus.MODIFIED, AcceptMethodAbstractNowDefaultRule::class.java)
@@ -171,7 +180,7 @@ tasks.named(LifecycleBasePlugin.CHECK_TASK_NAME) {
 }
 
 tasks.named<Javadoc>("javadoc") {
-    title = "OWASP Zed Attack Proxy"
+    title = "Zed Attack Proxy"
     source = sourceSets["main"].allJava.matching {
         include("org/parosproxy/**")
         include("org/zaproxy/**")
@@ -187,14 +196,14 @@ val langPack by tasks.registering(Zip::class) {
     group = LifecycleBasePlugin.BUILD_GROUP
     description = "Assembles the language pack for the Core Language Files add-on."
 
-    archiveFileName.set("$buildDir/langpack/ZAP_${project.version}_language_pack.$versionLangFile.zaplang")
+    archiveFileName.set(layout.buildDirectory.file("langpack/ZAP_${project.version}_language_pack.$versionLangFile.zaplang").get().asFile.absolutePath)
     isPreserveFileTimestamps = false
     isReproducibleFileOrder = true
 
     into("lang") {
         from(File(distDir, "lang"))
         from("src/main/resources/org/zaproxy/zap/resources") {
-            include("Messages.properties", "vulnerabilities.xml")
+            include("Messages.properties")
         }
     }
 }
@@ -255,7 +264,7 @@ listOf(
 }
 
 launch4j {
-    jar = tasks.named<Jar>("jar").get().archiveFileName.get()
+    setJarTask(tasks.named<Jar>("jar").get())
 }
 
 class ToString(private val callable: Callable<String>) {
